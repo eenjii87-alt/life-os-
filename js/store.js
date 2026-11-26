@@ -1,9 +1,10 @@
 import { apiGetAll, apiAdd, apiUpdate, apiDelete } from './api.js';
 
 export const store = {
-  data: null, // { AREAS:[], WISHES:[], GOALS:[], PROJECTS:[], TASKS:[], PRIORITY:[], LABELS:[], HABITS:[], HABIT_LOG:[], TASK_LOG:[], SCHEDULE:[], JOURNAL:[] }
+  data: null,
   loading: false,
   error: null,
+  syncing: false, // background sync indicator (doesn't block UI)
   listeners: [],
 };
 
@@ -32,6 +33,27 @@ export async function refresh() {
   }
 }
 
+// Фоновдоо (хэрэглэгчийг хүлээлгэхгүйгээр) дахин ачааллаж, формулаар
+// тооцогддог талбаруудыг (% Дуусгал гэх мэт) шинэчилнэ.
+let syncTimer = null;
+function scheduleBackgroundSync() {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    store.syncing = true;
+    notify();
+    try {
+      const fresh = await apiGetAll();
+      store.data = fresh;
+      store.error = null;
+    } catch (e) {
+      // чимээгүй — хэрэглэгч аль хэдийн local өөрчлөлтөө хараад байгаа
+    } finally {
+      store.syncing = false;
+      notify();
+    }
+  }, 700);
+}
+
 function nextId(sheet, idField) {
   const rows = store.data[sheet] || [];
   const max = rows.reduce((m, r) => {
@@ -56,23 +78,70 @@ export const ID_FIELDS = {
   JOURNAL: 'JournalID',
 };
 
+// Optimistic: шууд дэлгэцэнд харуулаад, дараа нь сервер рүү илгээнэ.
+// Алдаа гарвал буцааж арилгана.
 export async function addRow(sheet, data) {
   const idField = ID_FIELDS[sheet];
   const id = nextId(sheet, idField);
   const fullData = { [idField]: id, ...data };
-  await apiAdd(sheet, fullData);
-  await refresh();
-  return id;
+
+  store.data[sheet] = [...(store.data[sheet] || []), fullData];
+  notify();
+
+  try {
+    await apiAdd(sheet, fullData);
+    scheduleBackgroundSync();
+    return id;
+  } catch (e) {
+    store.data[sheet] = store.data[sheet].filter((r) => r[idField] !== id);
+    notify();
+    throw e;
+  }
 }
 
 export async function updateRow(sheet, id, data) {
-  await apiUpdate(sheet, id, data);
-  await refresh();
+  const idField = ID_FIELDS[sheet];
+  const rows = store.data[sheet] || [];
+  const idx = rows.findIndex((r) => String(r[idField]) === String(id));
+  const prev = idx !== -1 ? { ...rows[idx] } : null;
+
+  if (idx !== -1) {
+    rows[idx] = { ...rows[idx], ...data };
+    store.data[sheet] = [...rows];
+    notify();
+  }
+
+  try {
+    await apiUpdate(sheet, id, data);
+    scheduleBackgroundSync();
+  } catch (e) {
+    if (prev && idx !== -1) {
+      const rows2 = [...store.data[sheet]];
+      rows2[idx] = prev;
+      store.data[sheet] = rows2;
+      notify();
+    }
+    throw e;
+  }
 }
 
 export async function deleteRow(sheet, id) {
-  await apiDelete(sheet, id);
-  await refresh();
+  const idField = ID_FIELDS[sheet];
+  const rows = store.data[sheet] || [];
+  const removed = rows.find((r) => String(r[idField]) === String(id));
+  store.data[sheet] = rows.filter((r) => String(r[idField]) !== String(id));
+  notify();
+
+  try {
+    await apiDelete(sheet, id);
+    scheduleBackgroundSync();
+  } catch (e) {
+    if (removed) {
+      store.data[sheet] = [...store.data[sheet], removed];
+      notify();
+    }
+    throw e;
+  }
 }
 
 export function byId(sheet, idField, id) {

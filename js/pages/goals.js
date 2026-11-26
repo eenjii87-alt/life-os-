@@ -1,4 +1,4 @@
-import { store, addRow, updateRow, todayISO } from '../store.js';
+import { store, addRow, updateRow, deleteRow, todayISO } from '../store.js';
 import { el, card, sectionTitle, emptyState, toast } from '../ui.js';
 
 function pct(row) {
@@ -30,9 +30,16 @@ function wishRow(wish) {
   const isActive = wish['Статус'] !== 'Зорилго болсон';
   return el('div', { class: 'wish-row' }, [
     el('div', { class: 'wish-text' }, wish['Текст']),
-    isActive
-      ? el('button', { class: 'btn btn-primary', onclick: () => convertWishToGoal(wish) }, 'Зорилго болгох')
-      : el('span', { class: 'chip chip-done' }, 'Зорилго болсон'),
+    el('div', {}, [
+      isActive
+        ? el('button', { class: 'btn btn-primary', onclick: () => convertWishToGoal(wish) }, 'Зорилго болгох')
+        : el('span', { class: 'chip chip-done' }, 'Зорилго болсон'),
+      el('button', { class: 'btn btn-sm', title: 'Устгах', onclick: async () => {
+        if (!window.confirm('Хүслийг устгах уу?')) return;
+        await deleteRow('WISHES', wish['WishID']);
+        toast('Устгалаа');
+      } }, '🗑'),
+    ]),
   ]);
 }
 
@@ -83,6 +90,11 @@ function projectCard(project) {
     el('div', { class: 'project-head' }, [
       el('span', { class: 'project-name' }, project['Нэр']),
       el('span', { class: 'project-kind' }, project['Хугацааны төрөл']),
+      el('button', { class: 'btn btn-sm', title: 'Устгах', onclick: async () => {
+        if (!window.confirm('Төслийг устгах уу?')) return;
+        await deleteRow('PROJECTS', project['ProjectID']);
+        toast('Устгалаа');
+      } }, '🗑'),
     ]),
     progressBar(pct(project)),
     project['Хүрэх үр дүн'] ? el('div', { class: 'project-outcome' }, `🎯 ${project['Хүрэх үр дүн']}`) : null,
@@ -94,6 +106,11 @@ function goalCard(goal) {
   return card([
     el('div', { class: 'goal-head' }, [
       el('h3', {}, goal['Нэр']),
+      el('button', { class: 'btn btn-sm', title: 'Устгах', onclick: async () => {
+        if (!window.confirm('Зорилгыг устгах уу?')) return;
+        await deleteRow('GOALS', goal['GoalID']);
+        toast('Устгалаа');
+      } }, '🗑'),
     ]),
     progressBar(pct(goal)),
     goal['Тайлбар'] ? el('div', { class: 'goal-desc' }, goal['Тайлбар']) : null,

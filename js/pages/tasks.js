@@ -1,4 +1,4 @@
-import { store, updateRow, addRow, todayISO } from '../store.js';
+import { store, updateRow, addRow, deleteRow, todayISO } from '../store.js';
 import { el, statusChip, priorityDot, formatDate, toast, emptyState, card, sectionTitle } from '../ui.js';
 import { STATUS } from '../config.js';
 
@@ -28,10 +28,17 @@ function taskRow(task) {
         el('span', { class: 'due' }, `Due: ${formatDate(task['Due date'])}`),
       ]),
     ]),
-    el('div', { class: 'task-actions' }, locked ? [] : [
-      el('button', { class: 'btn btn-done', onclick: () => setStatus(task, STATUS.DONE) }, '✓'),
-      el('button', { class: 'btn btn-doing', onclick: () => setStatus(task, STATUS.DOING) }, '…'),
-      el('button', { class: 'btn btn-failed', onclick: () => setStatus(task, STATUS.FAILED) }, '✕'),
+    el('div', { class: 'task-actions' }, [
+      ...(locked ? [] : [
+        el('button', { class: 'btn btn-done', onclick: () => setStatus(task, STATUS.DONE) }, '✓'),
+        el('button', { class: 'btn btn-doing', onclick: () => setStatus(task, STATUS.DOING) }, '…'),
+        el('button', { class: 'btn btn-failed', onclick: () => setStatus(task, STATUS.FAILED) }, '✕'),
+      ]),
+      el('button', { class: 'btn btn-sm', title: 'Устгах', onclick: async () => {
+        if (!window.confirm('Даалгаврыг устгах уу?')) return;
+        await deleteRow('TASKS', task['TaskID']);
+        toast('Устгалаа');
+      } }, '🗑'),
     ]),
   ]);
 }

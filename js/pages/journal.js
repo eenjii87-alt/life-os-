@@ -1,4 +1,4 @@
-import { store, addRow, todayISO } from '../store.js';
+import { store, addRow, deleteRow, todayISO } from '../store.js';
 import { el, card, sectionTitle, emptyState, toast } from '../ui.js';
 
 function entryForm() {
@@ -45,7 +45,14 @@ function entryForm() {
 
 function entryCard(entry) {
   return card([
-    el('div', { class: 'journal-date' }, entry['Огноо']),
+    el('div', { class: 'journal-head' }, [
+      el('div', { class: 'journal-date' }, entry['Огноо']),
+      el('button', { class: 'btn btn-sm', title: 'Устгах', onclick: async () => {
+        if (!window.confirm('Тэмдэглэлийг устгах уу?')) return;
+        await deleteRow('JOURNAL', entry['JournalID']);
+        toast('Устгалаа');
+      } }, '🗑'),
+    ]),
     el('div', { class: 'journal-mood' }, `Мэдрэмж: ${entry['Мэдрэмж (1-5)']}/5`),
     el('ul', { class: 'gratitude-list' }, [1, 2, 3].map((n) => entry[`Талархал ${n}`] ? el('li', {}, entry[`Талархал ${n}`]) : null).filter(Boolean)),
     entry['Өдрийн онцлох зүйл'] ? el('div', {}, `✨ ${entry['Өдрийн онцлох зүйл']}`) : null,

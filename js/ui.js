@@ -6,7 +6,8 @@ export function el(tag, attrs = {}, children = []) {
     if (k === 'class') node.className = v;
     else if (k === 'html') node.innerHTML = v;
     else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
-    else if (v !== undefined && v !== null) node.setAttribute(k, v);
+    else if (v === false) { /* boolean attribute off: omit entirely */ }
+    else if (v !== undefined && v !== null) node.setAttribute(k, v === true ? '' : v);
   }
   (Array.isArray(children) ? children : [children]).forEach((c) => {
     if (c === null || c === undefined) return;

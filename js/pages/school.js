@@ -1,4 +1,4 @@
-import { store, addRow, updateRow, todayISO } from '../store.js';
+import { store, addRow, updateRow, deleteRow, todayISO } from '../store.js';
 import { el, statusChip, priorityDot, formatDate, toast, emptyState, sectionTitle, card } from '../ui.js';
 import { STATUS } from '../config.js';
 
@@ -20,6 +20,29 @@ async function ensureStudyWishLabel() {
   return id;
 }
 
+function addScheduleForm() {
+  const name = el('input', { class: 'input', placeholder: 'Хичээлийн нэр' });
+  const day = el('select', { class: 'input' }, DAY_ORDER.map((d) => el('option', { value: d }, d)));
+  const start = el('input', { class: 'input', type: 'time' });
+  const end = el('input', { class: 'input', type: 'time' });
+  const loc = el('input', { class: 'input', placeholder: 'Байршил (заавал биш)' });
+  const btn = el('button', { class: 'btn btn-primary', onclick: async () => {
+    if (!name.value.trim()) return;
+    await addRow('SCHEDULE', {
+      'Хичээлийн нэр': name.value.trim(),
+      AreaID: schoolAreaId() || '',
+      'Гараг': day.value,
+      'Эхлэх цаг': start.value,
+      'Дуусах цаг': end.value,
+      'Байршил': loc.value,
+    });
+    name.value = ''; loc.value = '';
+    toast('Хуваарьт нэмлээ');
+    location.hash = '#school';
+  } }, '+ Нэмэх');
+  return el('div', { class: 'add-form' }, [name, day, start, end, loc, btn]);
+}
+
 function scheduleSection() {
   const areaId = schoolAreaId();
   const rows = (store.data.SCHEDULE || []).filter((s) => !areaId || String(s['AreaID']) === String(areaId));
@@ -28,16 +51,22 @@ function scheduleSection() {
     (byDay[r['Гараг']] = byDay[r['Гараг']] || []).push(r);
   });
   const days = DAY_ORDER.filter((d) => byDay[d]);
-  return el('div', { class: 'schedule-grid' }, days.length ? days.map((day) =>
+  if (days.length === 0) return emptyState('Хуваарь алга байна');
+  return el('div', { class: 'schedule-grid' }, days.map((day) =>
     el('div', { class: 'schedule-day' }, [
       el('div', { class: 'schedule-day-name' }, day),
       ...byDay[day].map((s) => el('div', { class: 'schedule-item' }, [
-        el('div', { class: 'schedule-time' }, `${(s['Эхлэх цаг'] || '').slice(11, 16)}–${(s['Дуусах цаг'] || '').slice(11, 16)}`),
+        el('div', { class: 'schedule-time' }, `${(s['Эхлэх цаг'] || '').slice(0, 5)}–${(s['Дуусах цаг'] || '').slice(0, 5)}`),
         el('div', { class: 'schedule-name' }, s['Хичээлийн нэр']),
         s['Байршил'] ? el('div', { class: 'schedule-loc' }, s['Байршил']) : null,
+        el('button', { class: 'btn btn-sm btn-failed', onclick: async () => {
+          if (!window.confirm('Устгах уу?')) return;
+          await deleteRow('SCHEDULE', s['ScheduleID']);
+          toast('Устгалаа');
+        } }, '✕'),
       ])),
     ])
-  ) : [emptyState('Хуваарь алга байна')]);
+  ));
 }
 
 function addStudyWishForm() {
@@ -80,7 +109,14 @@ function studyWishList() {
   return el('div', { class: 'wish-list' }, items.map((t) =>
     el('div', { class: 'wish-row' }, [
       el('div', { class: 'wish-text' }, t['Нэр']),
-      el('button', { class: 'btn btn-sm', onclick: () => scheduleStudyWish(t) }, 'Товлох'),
+      el('div', {}, [
+        el('button', { class: 'btn btn-sm', onclick: () => scheduleStudyWish(t) }, 'Товлох'),
+        el('button', { class: 'btn btn-sm btn-failed', onclick: async () => {
+          if (!window.confirm('Устгах уу?')) return;
+          await deleteRow('TASKS', t['TaskID']);
+          toast('Устгалаа');
+        } }, '✕'),
+      ]),
     ])
   ));
 }
@@ -103,6 +139,7 @@ export function render(container) {
   if (!data) return;
 
   container.appendChild(sectionTitle('Хичээлийн хуваарь'));
+  container.appendChild(addScheduleForm());
   container.appendChild(scheduleSection());
 
   container.appendChild(sectionTitle('Судлах хүсэл'));

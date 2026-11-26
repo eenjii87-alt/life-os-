@@ -76,6 +76,8 @@ export const ID_FIELDS = {
   TASK_LOG: 'LogID',
   SCHEDULE: 'ScheduleID',
   JOURNAL: 'JournalID',
+  BIRTHDAYS: 'BirthdayID',
+  EMOTION_LOG: 'LogID',
 };
 
 // Optimistic: шууд дэлгэцэнд харуулаад, дараа нь сервер рүү илгээнэ.

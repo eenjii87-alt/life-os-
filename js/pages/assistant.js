@@ -49,6 +49,46 @@ async function checkInHabit(habit) {
   toast('Бэлгэдлээ ✓');
 }
 
+const MOODS = [
+  { key: '1', emoji: '😞', label: 'Муу' },
+  { key: '2', emoji: '😕', label: 'Муухан' },
+  { key: '3', emoji: '😐', label: 'Дунд' },
+  { key: '4', emoji: '🙂', label: 'Сайн' },
+  { key: '5', emoji: '😄', label: 'Маш сайн' },
+];
+
+function todayEmotionLogs() {
+  return (store.data.EMOTION_LOG || []).filter((l) => l['Огноо'] === todayISO());
+}
+
+async function logEmotion(moodKey) {
+  await addRow('EMOTION_LOG', { 'Огноо': todayISO(), 'Мэдрэмж': moodKey, 'Тэмдэглэл': '' });
+  toast('Мэдрэмжээ тэмдэглэлээ');
+}
+
+function emotionTracker() {
+  const todays = todayEmotionLogs();
+  const last7 = [...Array(7)].map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const logs = (store.data.EMOTION_LOG || []).filter((l) => l['Огноо'] === key);
+    const last = logs[logs.length - 1];
+    return { key, mood: last ? MOODS.find((m) => m.key === String(last['Мэдрэмж']))?.emoji : '·' };
+  }).reverse();
+
+  return card([
+    el('h3', {}, 'Өнөөдөр ямар санагдаж байна?'),
+    el('div', { class: 'emotion-row' }, MOODS.map((m) => el('button', {
+      class: 'emotion-btn',
+      title: m.label,
+      onclick: () => logEmotion(m.key),
+    }, m.emoji))),
+    todays.length ? el('div', { class: 'muted' }, `Өнөөдөр ${todays.length} удаа тэмдэглэсэн`) : null,
+    el('div', { class: 'emotion-trend' }, last7.map((d) => el('span', { class: 'emotion-trend-day', title: d.key }, d.mood))),
+  ]);
+}
+
 function addHabitForm() {
   const name = el('input', { class: 'input', placeholder: 'Шинэ хэвшлийн нэр' });
   const freq = el('select', { class: 'input' }, ['Өдөр бүр', 'Долоо хоногт', 'Сард'].map((f) => el('option', { value: f }, f)));
@@ -76,6 +116,8 @@ export function render(container) {
       el('div', { class: 'mascot-msg' }, mascotMessage(mood)),
     ])
   );
+
+  container.appendChild(emotionTracker());
 
   container.appendChild(sectionTitle('Хэвшлүүд (Habits)'));
   container.appendChild(addHabitForm());

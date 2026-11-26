@@ -1,56 +1,49 @@
-import { store, updateRow, addRow, todayISO, areaName } from '../store.js';
-import { el, statusChip, priorityDot, formatDate, toast, emptyState, card, sectionTitle } from '../ui.js';
+import { store, todayISO } from '../store.js';
+import { el, statusChip, priorityDot, formatDate, emptyState, card, sectionTitle, statCard } from '../ui.js';
 import { STATUS } from '../config.js';
 import { mascotMood, mascotEmoji } from './assistant.js';
+import { setStatus, reschedule, isLocked } from '../task-actions.js';
+import { getContext, taskInContext, CONTEXT_LABEL } from '../context.js';
 
-function isOverdueOrToday(task) {
-  if (task['Статус'] === STATUS.DONE) return false;
+function dateRangeFor(period) {
+  const now = new Date();
+  const start = new Date(now);
+  const end = new Date(now);
+  if (period === 'week') {
+    const day = (now.getDay() + 6) % 7; // Monday=0
+    start.setDate(now.getDate() - day);
+    end.setDate(start.getDate() + 6);
+  } else if (period === 'month') {
+    start.setDate(1);
+    end.setMonth(now.getMonth() + 1, 0);
+  } else if (period === 'year') {
+    start.setMonth(0, 1);
+    end.setMonth(11, 31);
+  }
+  const iso = (d) => d.toISOString().slice(0, 10);
+  return { start: iso(start), end: iso(end) };
+}
+
+function inRange(task, period) {
   const due = task['Due date'];
   if (!due) return false;
-  return String(due).slice(0, 10) <= todayISO();
-}
-
-async function promptNote(title) {
-  return window.prompt(title, '') || '';
-}
-
-async function setStatus(task, status) {
-  const note = status === STATUS.DONE || status === STATUS.FAILED
-    ? await promptNote('Богино тэмдэглэл (заавал биш): энэ даалгаврын талаар юу бодож байна?')
-    : '';
-  const patch = { 'Статус': status, 'Сүүлд хөдөлсөн огноо': todayISO() };
-  if (status === STATUS.DONE) patch['Дууссан огноо'] = todayISO();
-  await updateRow('TASKS', task['TaskID'], patch);
-  await addRow('TASK_LOG', {
-    TaskID: task['TaskID'],
-    Огноо: todayISO(),
-    'Статус': status,
-    Note: note,
-  });
-  toast('Шинэчиллээ ✓');
-}
-
-async function reschedule(task) {
-  const newDate = window.prompt('Шинэ due date (ЖЖЖЖ-СС-ӨӨ):', task['Due date'] || todayISO());
-  if (!newDate) return;
-  await updateRow('TASKS', task['TaskID'], { 'Статус': STATUS.TODO, 'Due date': newDate });
-  toast('Хугацааг шилжүүллээ');
-}
-
-function isLocked(task) {
-  const dep = task['DependsOnTaskID'];
-  if (!dep) return false;
-  const depTask = (store.data.TASKS || []).find((t) => String(t['TaskID']) === String(dep));
-  return depTask && depTask['Статус'] !== STATUS.DONE;
+  const d = String(due).slice(0, 10);
+  if (period === 'today') return d <= todayISO();
+  const { start, end } = dateRangeFor(period);
+  return d >= start && d <= end;
 }
 
 function taskRow(task) {
   const locked = isLocked(task);
-  const row = el('div', { class: `task-row ${locked ? 'locked' : ''}` }, [
+  const timeRange = task['Эхлэх цаг'] || task['Дуусах цаг']
+    ? `${task['Эхлэх цаг'] || '--:--'}–${task['Дуусах цаг'] || '--:--'}`
+    : null;
+  return el('div', { class: `task-row ${locked ? 'locked' : ''}` }, [
     el('div', { class: 'task-main' }, [
       el('div', { class: 'task-name' }, [locked ? el('span', { class: 'lock' }, '🔒 ') : null, task['Нэр']]),
       el('div', { class: 'task-meta' }, [
         priorityDot(task['PriorityID']),
+        timeRange ? el('span', { class: 'due' }, timeRange) : null,
         el('span', { class: 'due' }, `Due: ${formatDate(task['Due date'])}`),
       ]),
     ]),
@@ -58,21 +51,25 @@ function taskRow(task) {
       el('button', { class: 'btn btn-done', onclick: () => setStatus(task, STATUS.DONE) }, '✓ Дууссан'),
       el('button', { class: 'btn btn-doing', onclick: () => setStatus(task, STATUS.DOING) }, 'Хийгдэж буй'),
       el('button', { class: 'btn btn-failed', onclick: () => setStatus(task, STATUS.FAILED) }, 'Амжилтгүй'),
-      el('button', { class: 'btn btn-reschedule', onclick: () => reschedule(task) }, 'Хойшлуулах'),
+      el('button', { class: 'btn btn-reschedule', onclick: () => reschedule(task) }, 'Дахин төлөвлөх'),
     ]),
   ]);
-  return row;
 }
 
-export function render(container) {
+export function render(container, params) {
   const { data } = store;
   if (!data) return;
 
-  const tasks = data.TASKS || [];
-  const today = tasks.filter((t) => isOverdueOrToday(t));
-  const doneToday = tasks.filter((t) => t['Дууссан огноо'] === todayISO());
-  const failedAll = tasks.filter((t) => t['Статус'] === STATUS.FAILED);
-  const doingAll = tasks.filter((t) => t['Статус'] === STATUS.DOING);
+  const ctx = getContext();
+  const period = params?.get?.('period') || 'today';
+
+  const allTasks = (data.TASKS || []).filter((t) => taskInContext(t, ctx));
+  const periodTasks = allTasks.filter((t) => t['Статус'] !== STATUS.DONE && inRange(t, period));
+  const doneToday = allTasks.filter((t) => t['Дууссан огноо'] === todayISO());
+  const failedAll = allTasks.filter((t) => t['Статус'] === STATUS.FAILED);
+  const doingAll = allTasks.filter((t) => t['Статус'] === STATUS.DOING);
+  const overdue = allTasks.filter((t) => t['Статус'] !== STATUS.DONE && t['Due date'] && String(t['Due date']).slice(0, 10) < todayISO());
+  const goalsCount = (data.GOALS || []).length;
 
   const mood = mascotMood(data);
 
@@ -81,29 +78,39 @@ export function render(container) {
       el('div', { class: 'mascot-row' }, [
         el('div', { class: 'mascot' }, mascotEmoji(mood)),
         el('div', {}, [
-          el('div', { class: 'mascot-title' }, 'Өнөөдөр'),
+          el('div', { class: 'mascot-title' }, `Өдрийн мэнд! (${CONTEXT_LABEL[ctx]})`),
           el('div', { class: 'mascot-sub' }, `Дууссан: ${doneToday.length} · Хийгдэж буй: ${doingAll.length} · Амжилтгүй: ${failedAll.length}`),
         ]),
       ]),
-    ])
+    ], { class: 'card hero-card' })
   );
 
-  container.appendChild(sectionTitle('Өнөөдөр хийх зүйлс'));
-  if (today.length === 0) {
-    container.appendChild(emptyState('Өнөөдөр хийх даалгавар алга байна 🌿'));
+  container.appendChild(el('div', { class: 'stat-grid' }, [
+    statCard('Өнөөдөр', periodTasks.filter((t) => inRange(t, 'today')).length, '#dashboard?period=today', 'stat-pink'),
+    statCard('Хугацаа хэтэрсэн', overdue.length, '#tasks?filter=failed', 'stat-red'),
+    statCard('Хийгдэж буй', doingAll.length, '#tasks?filter=doing', 'stat-amber'),
+    statCard('Зорилго', goalsCount, '#goals', 'stat-blue'),
+  ]));
+
+  const tabs = [['today', 'Өнөөдөр'], ['week', '7 хоног'], ['month', 'Сар'], ['year', 'Жил']];
+  container.appendChild(el('div', { class: 'tabs' }, tabs.map(([val, label]) =>
+    el('a', { class: `tab ${period === val ? 'active' : ''}`, href: `#dashboard?period=${val}` }, label)
+  )));
+
+  if (periodTasks.length === 0) {
+    container.appendChild(emptyState('Энэ хугацаанд хийх даалгавар алга байна 🌿'));
   } else {
-    const list = el('div', { class: 'task-list' }, today.map(taskRow));
-    container.appendChild(list);
+    container.appendChild(el('div', { class: 'task-list' }, periodTasks
+      .sort((a, b) => String(a['Due date']).localeCompare(String(b['Due date'])))
+      .map(taskRow)));
   }
 
-  // Quick filters link-outs
   container.appendChild(sectionTitle('Шуурхай харах'));
-  const quick = el('div', { class: 'quick-grid' }, [
+  container.appendChild(el('div', { class: 'quick-grid' }, [
     quickCard('Амжилтгүй', failedAll.length, '#tasks?filter=failed'),
     quickCard('Хийгдэж буй', doingAll.length, '#tasks?filter=doing'),
     quickCard('Өнөөдөр дууссан', doneToday.length, '#tasks?filter=done-today'),
-  ]);
-  container.appendChild(quick);
+  ]));
 }
 
 function quickCard(label, count, href) {

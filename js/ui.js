@@ -60,3 +60,55 @@ export function card(children, attrs = {}) {
 export function sectionTitle(text, extra) {
   return el('div', { class: 'section-title' }, [el('h2', {}, text), extra || null]);
 }
+
+export function statCard(label, count, href, tone) {
+  return el('a', { class: `stat-card ${tone || ''}`, href }, [
+    el('div', { class: 'stat-count' }, String(count)),
+    el('div', { class: 'stat-label' }, label),
+  ]);
+}
+
+// Жижиг modal: даалгаврын төлөв өөрчлөх үед тэмдэглэл бичих, эсвэл
+// хугацаа сонгох гэх мэт асуулт асуухад ашиглана. window.prompt-оос
+// илүү зөөлөн харагддаг.
+export function openModal({ title, fields = [], submitLabel = 'Хадгалах', onSubmit }) {
+  return new Promise((resolve) => {
+    const inputs = fields.map((f) => {
+      if (f.type === 'textarea') {
+        return el('textarea', { class: 'input textarea', placeholder: f.placeholder || '', rows: 3 });
+      }
+      return el('input', {
+        class: 'input',
+        type: f.type || 'text',
+        placeholder: f.placeholder || '',
+        value: f.value || '',
+      });
+    });
+
+    function close(result) {
+      overlay.remove();
+      resolve(result);
+    }
+
+    const cancelBtn = el('button', { class: 'btn', onclick: () => close(null) }, 'Болих');
+    const submitBtn = el('button', { class: 'btn btn-primary', onclick: () => {
+      const values = {};
+      fields.forEach((f, i) => { values[f.key] = inputs[i].value; });
+      close(values);
+      if (onSubmit) onSubmit(values);
+    } }, submitLabel);
+
+    const box = el('div', { class: 'modal-box' }, [
+      el('h3', {}, title),
+      el('div', { class: 'modal-fields' }, fields.map((f, i) => el('div', { class: 'modal-field' }, [
+        f.label ? el('label', {}, f.label) : null,
+        inputs[i],
+      ]))),
+      el('div', { class: 'modal-actions' }, [cancelBtn, submitBtn]),
+    ]);
+    const overlay = el('div', { class: 'modal-overlay', onclick: (e) => { if (e.target === overlay) close(null); } }, [box]);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('show'));
+    if (inputs[0]) inputs[0].focus();
+  });
+}

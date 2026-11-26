@@ -1,6 +1,7 @@
 import { store, addRow, updateRow, deleteRow, todayISO } from '../store.js';
 import { el, statusChip, priorityDot, formatDate, toast, emptyState, sectionTitle, card } from '../ui.js';
 import { STATUS } from '../config.js';
+import { setStatus, isLocked } from '../task-actions.js';
 
 const DAY_ORDER = ['Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба', 'Ням'];
 
@@ -126,12 +127,20 @@ function assignmentsSection() {
   const projectIds = new Set((store.data.PROJECTS || []).filter((p) => !areaId || String(p['AreaID']) === String(areaId)).map((p) => p['ProjectID']));
   const tasks = (store.data.TASKS || []).filter((t) => projectIds.has(t['ProjectID']));
   if (tasks.length === 0) return emptyState('Даалгавар алга байна');
-  return el('div', { class: 'task-list' }, tasks.map((t) => el('div', { class: 'task-row' }, [
-    el('div', { class: 'task-main' }, [
-      el('div', { class: 'task-name' }, t['Нэр']),
-      el('div', { class: 'task-meta' }, [priorityDot(t['PriorityID']), statusChip(t['Статус']), el('span', { class: 'due' }, `Due: ${formatDate(t['Due date'])}`)]),
-    ]),
-  ])));
+  return el('div', { class: 'task-list' }, tasks.map((t) => {
+    const locked = isLocked(t);
+    return el('div', { class: `task-row ${locked ? 'locked' : ''}` }, [
+      el('div', { class: 'task-main' }, [
+        el('div', { class: 'task-name' }, [locked ? el('span', { class: 'lock' }, '🔒 ') : null, t['Нэр']]),
+        el('div', { class: 'task-meta' }, [priorityDot(t['PriorityID']), statusChip(t['Статус']), el('span', { class: 'due' }, `Due: ${formatDate(t['Due date'])}`)]),
+      ]),
+      el('div', { class: 'task-actions' }, locked ? [] : [
+        el('button', { class: 'btn btn-done', onclick: () => setStatus(t, STATUS.DONE) }, '✓'),
+        el('button', { class: 'btn btn-doing', onclick: () => setStatus(t, STATUS.DOING) }, '…'),
+        el('button', { class: 'btn btn-failed', onclick: () => setStatus(t, STATUS.FAILED) }, '✕'),
+      ]),
+    ]);
+  }));
 }
 
 export function render(container) {

@@ -1,5 +1,6 @@
 import { store, subscribe, refresh } from './store.js';
 import { el } from './ui.js';
+import { getContext, setContext, CONTEXT_LABEL } from './context.js';
 import * as dashboard from './pages/dashboard.js';
 import * as calendar from './pages/calendar.js';
 import * as tasks from './pages/tasks.js';
@@ -42,6 +43,20 @@ function buildNav() {
   });
 }
 
+function buildContextSwitcher() {
+  const host = document.getElementById('context-switcher');
+  if (!host) return;
+  host.innerHTML = '';
+  const active = getContext();
+  ['all', 'school', 'personal'].forEach((ctx) => {
+    const btn = el('button', {
+      class: `ctx-btn ${active === ctx ? 'active' : ''}`,
+      onclick: () => { setContext(ctx); buildContextSwitcher(); renderPage(); },
+    }, CONTEXT_LABEL[ctx]);
+    host.appendChild(btn);
+  });
+}
+
 function highlightNav(route) {
   document.querySelectorAll('.nav-item').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === route);
@@ -74,6 +89,7 @@ window.addEventListener('hashchange', renderPage);
 
 async function init() {
   buildNav();
+  buildContextSwitcher();
   subscribe(renderPage);
   renderPage();
   await refresh();
